@@ -1360,7 +1360,8 @@ pub struct TpmsCreationData {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, Marshalable)]
+#[marshalable(Tpm2b)]
 pub struct Tpm2bCreationData {
     size: u16,
     creation_data: [u8; size_of::<TpmsCreationData>()],
@@ -1480,7 +1481,7 @@ impl_try_marshalable_tpm2b_simple! {Tpm2bTemplate, buffer}
 impl_try_marshalable_tpm2b_simple! {Tpm2bLabel, buffer}
 impl_try_marshalable_tpm2b_simple! {Tpm2bSensitiveCreate, sensitive}
 impl_try_marshalable_tpm2b_simple! {Tpm2bPublic, public_area}
-impl_try_marshalable_tpm2b_simple! {Tpm2bCreationData, creation_data}
+//impl_try_marshalable_tpm2b_simple! {Tpm2bCreationData, creation_data}
 
 /// Provides conversion to/from a struct type for TPM2B types that don't hold a bytes buffer.
 pub trait Tpm2bStruct: Tpm2bSimple {
@@ -1514,7 +1515,7 @@ macro_rules! impl_try_marshalable_tpm2b_struct {
 }
 impl_try_marshalable_tpm2b_struct! {Tpm2bSensitiveCreate, TpmsSensitiveCreate, sensitive}
 impl_try_marshalable_tpm2b_struct! {Tpm2bPublic, TpmtPublic, public_area}
-impl_try_marshalable_tpm2b_struct! {Tpm2bCreationData, TpmsCreationData, creation_data}
+//impl_try_marshalable_tpm2b_struct! {Tpm2bCreationData, TpmsCreationData, creation_data}
 
 // Adds common helpers for TPML type $T.
 macro_rules! impl_tpml {

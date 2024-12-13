@@ -1,13 +1,26 @@
 #![forbid(unsafe_code)]
 
 use std::collections::HashMap;
-
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, quote_spanned};
 use syn::{
     parse_macro_input, spanned::Spanned, Attribute, Data, DataEnum, DeriveInput, Error, Expr,
     Field, Fields, FieldsNamed, Ident, Index, MetaNameValue, Path, Result, Type,
 };
+
+// For logging during compilation.
+use log::info;
+use simple_logger::SimpleLogger;
+use std::sync::Once;
+static LOGGER_INIT: Once = Once::new();
+fn init_logger() {
+    LOGGER_INIT.call_once(|| {
+        SimpleLogger::new()
+            .with_level(log::LevelFilter::Info) // Adjust the log level as needed
+            .init()
+            .expect("Failed to initialize logger");
+    });
+}
 
 /// The Marshalable derive macro generates an implementation of the Marshalable trait
 /// for a struct by calling try_{un}marshal on each field in the struct. This
@@ -37,6 +50,7 @@ pub fn derive_tpm_marshal(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 fn derive_tpm_marshal_inner(input: DeriveInput) -> Result<TokenStream> {
     let input_span = input.span();
     let name = input.ident;
+    let has_tpm2b = input.attrs.iter().any(|attr| is_tpm2b_directive(attr));
     let (marsh_text, unmarsh_text, pure_impl) = match input.data {
         Data::Struct(stru) => {
             let marshal_text = get_field_marshal_body(&stru.fields)?;
@@ -51,6 +65,69 @@ fn derive_tpm_marshal_inner(input: DeriveInput) -> Result<TokenStream> {
                 #field_unmarsh
                 Ok(#instantiation)
             };
+
+            init_logger();
+
+            if has_tpm2b {
+                if let Fields::Named(ref fields) = stru.fields {
+
+                    // First make sure we have precisely 2 elements:
+                    assert!(
+                        fields.named.len() == 2,
+                        "A Tpm2b struct must contain just to elements, a u16 size and a buffer array when using #[marshalable(Tpm2b)]"
+                    );
+
+                    // Lets validate the first element is named size and has type u16.
+                    {
+                        let first = &fields.named[0];
+                        let field_name = first.ident.as_ref().unwrap();
+                        let field_type = &first.ty;
+                        assert!(
+                            field_name == "size" &&
+                            matches!(
+                                field_type,
+                                syn::Type::Path(type_path) if type_path.path.is_ident("u16")
+                            ),
+                            "First element in Tpm2b struct must be a 'size: u16' when using #[marshalable(Tpm2b)]"
+                        );
+                    }
+
+                    // Lets validate the second element in the Tpm2b structure and extract name and size expression.
+                    {
+                        let second = &fields.named[1];
+                        let field_name = second.ident.as_ref().unwrap();
+                        let field_type = &second.ty;
+                        info!("The field name is {:?}",field_name);
+                        info!("The field type is {:?}",quote!(field_type));
+
+                        // Expect array type.
+                        let type_array = if let syn::Type::Array(type_array) = field_type {
+                            type_array
+                        } else {
+                            panic!("Second element in Tpm2b struct must be u8 buffer: <buffer name>: [u8, <buffer size>].");
+                        };
+
+                        // Extract the type used.
+                        let type_path = if let syn::Type::Path(type_path) = &*type_array.elem {
+                            type_path
+                        } else {
+                            panic!("Second element in Tpm2b struct must be u8 buffer: <buffer name>: [u8, <buffer size>].");
+                        };
+
+                        // Confirm it is an array of u8 elements.
+                        assert!(
+                            type_path.path.is_ident("u8"),
+                            "Second element in Tpm2b struct must be u8 buffer: <buffer name>: [u8, <buffer size>]."
+                        );
+
+                        // Lets extract the size expression.
+                        let size_expression = &type_array.len;
+                        info!("The size expression is {:?}",quote!(#size_expression).to_string());
+                    }
+
+                }
+                //assert!(false, "Content is: {}", stru.fields[0].);
+            }
             (marshal_text, unmarshal_text, TokenStream::new())
         }
         Data::Enum(enu) => {
@@ -82,7 +159,40 @@ fn derive_tpm_marshal_inner(input: DeriveInput) -> Result<TokenStream> {
         }
     };
 
+    // if has_tpm2b {
+    //     assert!(false, "Content is: {}", input.data);
+    //     let tpm2b_expanded = quote! {
+    //     };
+    //     expanded.extend(tpm2b_expanded);
+    // }
+
     Ok(expanded)
+}
+
+//fn get_tpm2b_buffer_and_size(data: Data) -> str
+
+fn is_tpm2b_directive(attr: &Attribute) -> bool {
+    // Ensure the attribute path matches "Marshalable"
+    if attr.path().is_ident("marshalable") {
+        // Parse the arguments of the attribute
+        attr.parse_args_with(|input: syn::parse::ParseStream| {
+            // Look for the "Tpm2b" argument
+            while !input.is_empty() {
+                let path: syn::Path = input.parse()?;
+                if path.is_ident("Tpm2b") {
+                    return Ok(true);
+                }
+                // Skip over commas (if present) between arguments
+                if input.peek(syn::Token![,]) {
+                    let _comma: syn::Token![,] = input.parse()?;
+                }
+            }
+            Ok(false)
+        })
+        .unwrap_or(false)
+    } else {
+        false
+    }
 }
 
 /// Produces a variant {un}marshal implementations for an enum.
