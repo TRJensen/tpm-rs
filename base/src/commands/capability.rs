@@ -1,7 +1,7 @@
 //! [TPM2.0 1.83] 30 Capability Commands
-
 use crate::commands::{Marshalable, TpmCommand};
 use crate::constants::{TpmCap, TpmCc, TpmPt};
+use crate::marshal;
 use crate::{TpmiYesNo, TpmsCapabilityData};
 
 /// [TPM2.0 1.83] 30.2 TPM2_GetCapability (Command)
