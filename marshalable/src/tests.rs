@@ -2,6 +2,9 @@ use super::*;
 
 // Provide the tpm2_rs_marshal path to root to enable derive macro to work properly
 use crate as tpm2_rs_marshalable;
+use crate as marshal;
+use core::result::Result;
+use tpm2_rs_errors::TpmRcError;
 
 macro_rules! impl_test_scalar {
     ($T:ty, $I:expr, $V:expr) => {
@@ -11,7 +14,7 @@ macro_rules! impl_test_scalar {
         let same_size_buffer: [u8; SIZE_OF_TYPE] = [$I; SIZE_OF_TYPE];
         let larger_buffer: [u8; SIZE_OF_TYPE + 4] = [$I; SIZE_OF_TYPE + 4];
 
-        let mut res: TpmRcResult<$T> =
+        let mut res: marshal::Result<$T> =
             <$T>::try_unmarshal(&mut UnmarshalBuf::new(&too_small_buffer));
         assert!(res.is_err());
 

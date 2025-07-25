@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-
+use crate::marshal;
 use crate::Marshalable;
 use open_enum::open_enum;
 
